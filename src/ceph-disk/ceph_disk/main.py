@@ -18,6 +18,8 @@
 # GNU Library Public License for more details.
 #
 
+from __future__ import print_function
+
 import argparse
 import base64
 import errno
@@ -250,7 +252,7 @@ class filelock(object):
 
     def acquire(self):
         assert not self.fd
-        self.fd = file(self.fn, 'w')
+        self.fd = open(self.fn, 'w')
         fcntl.lockf(self.fd, fcntl.LOCK_EX)
 
     def release(self):
@@ -324,11 +326,8 @@ def is_systemd():
     """
     Detect whether systemd is running
     """
-    with file('/proc/1/comm', 'rb') as i:
-        for line in i:
-            if 'systemd' in line:
-                return True
-    return False
+    with open('/proc/1/comm', 'r') as f:
+        return 'systemd' in f.read()
 
 
 def is_upstart():
@@ -336,9 +335,7 @@ def is_upstart():
     Detect whether upstart is running
     """
     (out, err, _) = command(['init', '--version'])
-    if 'upstart' in out:
-        return True
-    return False
+    return 'upstart' in out
 
 
 def maybe_mkdir(*a, **kw):
@@ -352,7 +349,7 @@ def maybe_mkdir(*a, **kw):
         os.unlink(*a)
     try:
         os.mkdir(*a, **kw)
-    except OSError, e:
+    except OSError as e:
         if e.errno == errno.EEXIST:
             pass
         else:
@@ -361,10 +358,7 @@ def maybe_mkdir(*a, **kw):
 
 def which(executable):
     """find the location of an executable"""
-    if 'PATH' in os.environ:
-        envpath = os.environ['PATH']
-    else:
-        envpath = os.defpath
+    envpath = os.environ.get('PATH') or os.defpath
     PATH = envpath.split(os.pathsep)
 
     locations = PATH + [
@@ -422,7 +416,7 @@ def command(arguments, **kwargs):
         stderr=subprocess.PIPE,
         **kwargs)
     out, err = process.communicate()
-    return out, err, process.returncode
+    return out.decode(encoding='UTF-8'), err, process.returncode
 
 
 def command_check_call(arguments):
@@ -744,7 +738,7 @@ def is_mounted(dev):
     Check if the given device is mounted.
     """
     dev = os.path.realpath(dev)
-    with file('/proc/mounts', 'rb') as proc_mounts:
+    with open('/proc/mounts', 'r') as proc_mounts:
         for line in proc_mounts:
             fields = line.split()
             if len(fields) < 3:
@@ -837,7 +831,7 @@ def read_one_line(parent, name):
     """
     path = os.path.join(parent, name)
     try:
-        line = file(path, 'rb').read()
+        line = open(path, 'rb').read()
     except IOError as e:
         if e.errno == errno.ENOENT:
             return None
@@ -864,7 +858,7 @@ def write_one_line(parent, name, text):
     """
     path = os.path.join(parent, name)
     tmp = '{path}.{pid}.tmp'.format(path=path, pid=os.getpid())
-    with file(tmp, 'wb') as tmp_file:
+    with open(tmp, 'wb') as tmp_file:
         tmp_file.write(text + '\n')
         os.fsync(tmp_file.fileno())
     path_set_context(tmp)
@@ -957,7 +951,7 @@ def get_ceph_user():
             pwd.getpwnam(CEPH_PREF_USER)
             return CEPH_PREF_USER
         except KeyError:
-            print "No such user: " + CEPH_PREF_USER
+            print("No such user:", CEPH_PREF_USER)
             sys.exit(2)
     else:
         try:
@@ -975,7 +969,7 @@ def get_ceph_group():
             grp.getgrnam(CEPH_PREF_GROUP)
             return CEPH_PREF_GROUP
         except KeyError:
-            print "No such group: " + CEPH_PREF_GROUP
+            print("No such group:", CEPH_PREF_GROUP)
             sys.exit(2)
     else:
         try:
@@ -1145,7 +1139,7 @@ def _dmcrypt_map(
     if dev:
         return dev
 
-    if isinstance(key, types.TupleType):
+    if isinstance(key, tuple):
         # legacy, before lockbox
         assert os.path.exists(key[0])
         keypath = key[0]
@@ -1431,7 +1425,7 @@ def zap(dev):
         # isn't too thorough.
         lba_size = 4096
         size = 33 * lba_size
-        with file(dev, 'wb') as dev_file:
+        with open(dev, 'wb') as dev_file:
             dev_file.seek(-size, os.SEEK_END)
             dev_file.write(size * '\0')
 
@@ -1977,7 +1971,7 @@ class PrepareSpace(object):
                       ' (ceph-osd will resize and allocate)',
                       self.name,
                       getattr(self.args, self.name))
-            with file(getattr(self.args, self.name), 'wb') as space_file:
+            with open(getattr(self.args, self.name), 'wb') as space_file:
                 pass
 
         LOG.debug('%s is file %s',
@@ -3193,7 +3187,7 @@ def find_cluster_by_uuid(_uuid):
         try:
             fsid = get_fsid(cluster)
         except Error as e:
-            if e.message != 'getting cluster uuid from configuration failed':
+            if 'getting cluster uuid from configuration failed' not in str(e):
                 raise e
             no_fsid.append(cluster)
         else:
@@ -3267,7 +3261,7 @@ def activate(
                 init = init_get()
 
         LOG.debug('Marking with init system %s', init)
-        with file(os.path.join(path, init), 'w'):
+        with open(os.path.join(path, init), 'w'):
             pass
 
     # remove markers for others, just in case.
@@ -3796,10 +3790,11 @@ def main_activate_all(args):
                 )
 
             except Exception as e:
-                print >> sys.stderr, '{prog}: {msg}'.format(
-                    prog=args.prog,
-                    msg=e,
+                print(
+                    '{prog}: {msg}'.format(prog=args.prog, msg=e),
+                    file=sys.stderr
                 )
+
                 err = True
 
             finally:
@@ -3812,7 +3807,7 @@ def main_activate_all(args):
 
 def is_swap(dev):
     dev = os.path.realpath(dev)
-    with file('/proc/swaps', 'rb') as proc_swaps:
+    with open('/proc/swaps', 'r') as proc_swaps:
         for line in proc_swaps.readlines()[1:]:
             fields = line.split()
             if len(fields) < 3:
@@ -4119,7 +4114,7 @@ def list_devices():
 
     uuid_map = {}
     space_map = {}
-    for base, parts in sorted(partmap.iteritems()):
+    for base, parts in sorted(partmap.items()):
         for p in parts:
             dev = get_dev_path(p)
             part_uuid = get_partition_uuid(dev)
@@ -4158,7 +4153,7 @@ def list_devices():
               str(uuid_map) + ", space_map = " + str(space_map))
 
     devices = []
-    for base, parts in sorted(partmap.iteritems()):
+    for base, parts in sorted(partmap.items()):
         if parts:
             disk = {'path': get_dev_path(base)}
             partitions = []
@@ -4201,11 +4196,11 @@ def main_list_protected(args):
     else:
         selected_devices = devices
     if args.format == 'json':
-        print json.dumps(selected_devices)
+        print(json.dumps(selected_devices))
     else:
         output = list_format_plain(selected_devices)
         if output:
-            print output
+            print(output)
 
 
 ###########################
@@ -4243,7 +4238,7 @@ def set_suppress(path):
         raise Error('not a block device', path)
     base = get_dev_name(disk)
 
-    with file(SUPPRESS_PREFIX + base, 'w') as f:  # noqa
+    with open(SUPPRESS_PREFIX + base, 'w') as f:  # noqa
         pass
     LOG.info('set suppress flag on %s', base)
 
