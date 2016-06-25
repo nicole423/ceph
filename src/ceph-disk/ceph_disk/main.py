@@ -38,7 +38,6 @@ import time
 import shlex
 import pwd
 import grp
-import types
 import textwrap
 
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
@@ -213,7 +212,6 @@ INIT_SYSTEMS = [
     'upstart',
     'sysvinit',
     'systemd',
-    'openrc',
     'auto',
     'none',
 ]
@@ -420,8 +418,8 @@ def command(arguments, **kwargs):
         **kwargs)
     out, err = process.communicate()
 
-
     return _bytes2str(out), _bytes2str(err), process.returncode
+
 
 def _bytes2str(string):
     return string.decode('utf-8') if isinstance(string, bytes) else string
@@ -756,7 +754,7 @@ def is_mounted(dev):
             if mounts_dev.startswith(b'/') and os.path.exists(mounts_dev):
                 mounts_dev = os.path.realpath(mounts_dev)
                 if mounts_dev == dev:
-                    return path
+                    return _bytes2str(path)
     return None
 
 
@@ -1400,11 +1398,10 @@ def update_partition(dev, description):
     LOG.debug('Calling partprobe on %s device %s', description, dev)
     partprobe_ok = False
     error = 'unknown error'
-    partprobe = _get_command_executable(['partprobe'])[0]
-    for i in (1, 2, 3, 4, 5):
+    for i in range(5):
         command_check_call(['udevadm', 'settle', '--timeout=600'])
         try:
-            _check_output(['flock', '-s', dev, partprobe, dev])
+            _check_output(['partprobe', dev])
             partprobe_ok = True
             break
         except subprocess.CalledProcessError as e:
@@ -2879,20 +2876,6 @@ def start_daemon(
                     'ceph-osd@{osd_id}'.format(osd_id=osd_id),
                 ],
             )
-        elif os.path.exists(os.path.join(path, 'openrc')):
-            base_script = '/etc/init.d/ceph-osd'
-            osd_script = '{base}.{osd_id}'.format(
-                base=base_script,
-                osd_id=osd_id
-            )
-            if not os.path.exists(osd_script):
-                os.symlink(base_script, osd_script)
-            command_check_call(
-                [
-                    osd_script,
-                    'start',
-                ],
-            )
         else:
             raise Error('{cluster} osd.{osd_id} is not tagged '
                         'with an init system'.format(
@@ -2948,13 +2931,6 @@ def stop_daemon(
                     'systemctl',
                     'stop',
                     'ceph-osd@{osd_id}'.format(osd_id=osd_id),
-                ],
-            )
-        elif os.path.exists(os.path.join(path, 'openrc')):
-            command_check_call(
-                [
-                    '/etc/init.d/ceph-osd.{osd_id}'.format(osd_id=osd_id),
-                    'stop',
                 ],
             )
         else:
@@ -3814,7 +3790,7 @@ def get_oneliner(base, name):
     path = os.path.join(base, name)
     if os.path.isfile(path):
         with open(path, 'rb') as _file:
-            return _file.readline().rstrip()
+            return _bytes2str(_file.readline().rstrip())
     return None
 
 
