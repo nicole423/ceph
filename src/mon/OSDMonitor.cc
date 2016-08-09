@@ -7732,7 +7732,7 @@ bool OSDMonitor::preprocess_pool_op(MonOpRequestRef op)
 
   if (!osdmap.get_pg_pool(m->pool)) {
     dout(10) << "attempt to operate on non-existent pool id " << m->pool << dendl;
-    _pool_op_reply(op, 0, osdmap.get_epoch());
+    _pool_op_reply(op, -ENOENT, osdmap.get_epoch());
     return true;
   }
 
