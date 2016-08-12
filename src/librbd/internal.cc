@@ -910,6 +910,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 	if (r < 0) {
 	  lderr(cct) << "error opening image: "
 		     << cpp_strerror(r) << dendl;
+          delete imctx;
 	  return r;
 	}
 	librbd::NoOpProgressContext prog_ctx;
