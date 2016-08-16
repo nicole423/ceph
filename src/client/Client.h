@@ -1034,6 +1034,7 @@ public:
   int ftruncate(int fd, loff_t size);
   int fsync(int fd, bool syncdataonly);
   int fstat(int fd, struct stat *stbuf, int mask=CEPH_STAT_CAP_INODE_ALL);
+  int fstatx(int fd, unsigned int flags, unsigned int want, struct ceph_statx *stx);
   int fallocate(int fd, int mode, loff_t offset, loff_t length);
 
   // full path xattr ops
